@@ -6,7 +6,11 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    
+    "export": "next export",
+    "predeploy": "GITHUB_PAGES=true npm run build && npm run export",
+    "deploy": "rm -rf docs && mkdir docs && cp -r out/* docs/ && touch docs/.nojekyll && git add docs && git commit -m \"Deploy to Pages\" || echo \"no changes\" && git push"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.7",
@@ -35,3 +39,4 @@
     "typescript": "^5"
   }
 }
+
