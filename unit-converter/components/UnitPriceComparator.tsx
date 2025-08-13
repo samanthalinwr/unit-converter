@@ -1,33 +1,275 @@
 'use client';
 
 import React, { useMemo, useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "./ui/card";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "./ui/select";
+import { Switch } from "./ui/switch";
+import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
 import { ArrowLeftRight, RefreshCcw, Copy } from "lucide-react";
 
-// --- your existing code below unchanged ---
+// --- constants & types ---
 const WEIGHT_UNITS = ["oz", "lb", "g", "kg"] as const;
 type WeightUnit = typeof WEIGHT_UNITS[number];
 
-type ItemState = { name: string; price: string; quantity: string; unit: WeightUnit; };
+type ItemState = {
+  name: string;
+  price: string;
+  quantity: string;
+  unit: WeightUnit;
+};
 
-const GRAMS_PER: Record<WeightUnit, number> = { oz: 28.349523125, lb: 453.59237, g: 1, kg: 1000 };
+const GRAMS_PER: Record<WeightUnit, number> = {
+  oz: 28.349523125,
+  lb: 453.59237,
+  g: 1,
+  kg: 1000,
+};
 
-function fmt(n: number) { /* ...same as yours... */ }
-function toNumber(s: string) { /* ...same as yours... */ }
-function computeWeightPrices(price: number, qty: number, unit: WeightUnit) { /* ... */ }
+// --- utils ---
+function fmt(n: number) {
+  if (!isFinite(n)) return "—";
+  if (n === 0) return "$0.00";
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  }).format(n);
+}
 
-function useWeightPrices(item: ItemState) { /* ... */ }
-function SummaryRow(/* ... */) { /* ... */ }
-function ItemCard(/* ... */) { /* ... */ }
+function toNumber(s: string) {
+  const n = Number((s || "").toString().replace(/,/g, ""));
+  return isFinite(n) ? n : NaN;
+}
+
+function computeWeightPrices(price: number, qty: number, unit: WeightUnit) {
+  const totalGrams = qty * GRAMS_PER[unit];
+  const perGram = price / totalGrams;
+  return {
+    per_g: perGram,
+    per_oz: perGram * GRAMS_PER.oz,
+    per_lb: perGram * GRAMS_PER.lb,
+    per_kg: perGram * GRAMS_PER.kg,
+  };
+}
+
+function useWeightPrices(item: ItemState) {
+  return useMemo(() => {
+    const price = toNumber(item.price);
+    const qty = toNumber(item.quantity);
+    if (!isFinite(price) || !isFinite(qty) || price <= 0 || qty <= 0) return null;
+    return computeWeightPrices(price, qty, item.unit);
+  }, [item.price, item.quantity, item.unit]);
+}
+
+function SummaryRow({ label, value, emphasize }: { label: string; value: number; emphasize?: boolean }) {
+  return (
+    <div className="flex items-center justify-between text-sm py-1">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`font-medium tabular-nums ${emphasize ? "text-primary" : ""}`}>{fmt(value)}</span>
+    </div>
+  );
+}
+
+function ItemCard({
+  item, onChange, baseUnit, onBaseUnitChange, showName, isWinner, winnerText,
+}: {
+  item: ItemState;
+  onChange: (n: ItemState) => void;
+  baseUnit: WeightUnit;
+  onBaseUnitChange: (u: WeightUnit) => void;
+  showName?: boolean;
+  isWinner?: boolean;
+  winnerText?: string;
+}) {
+  const prices = useWeightPrices(item);
+
+  const normalizedBase = useMemo(() => {
+    if (!prices) return NaN;
+    const map: Record<WeightUnit, number> = {
+      g: prices.per_g,
+      oz: prices.per_oz,
+      lb: prices.per_lb,
+      kg: prices.per_kg,
+    } as any;
+    return map[baseUnit];
+  }, [prices, baseUnit]);
+
+  const copyPerKg = async () => {
+    if (!prices) return;
+    const text = `${fmt(prices.per_kg)} / kg`;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <Card className={`w-full relative ${isWinner ? "ring-2 ring-green-500 rounded-xl" : ""}`}>
+      {isWinner && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-xs font-semibold px-3 py-1 rounded-full shadow-md border border-green-300">
+          {winnerText}
+        </div>
+      )}
+      <CardContent className="p-4 space-y-4">
+        {showName && (
+          <div className="space-y-2">
+            <Label htmlFor="name">Label (optional)</Label>
+            <Input id="name" placeholder="e.g., Brand A" value={item.name}
+              onChange={(e) => onChange({ ...item, name: e.target.value })} />
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="price">Price ($)</Label>
+            <Input id="price" inputMode="decimal" placeholder="e.g., 12.99" value={item.price}
+              onChange={(e) => onChange({ ...item, price: e.target.value })} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-2">
+              <Label htmlFor="qty">Quantity</Label>
+              <Input id="qty" inputMode="decimal" placeholder="e.g., 32" value={item.quantity}
+                onChange={(e) => onChange({ ...item, quantity: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Unit</Label>
+              <Select value={item.unit} onValueChange={(u) => onChange({ ...item, unit: u as WeightUnit })}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {WEIGHT_UNITS.map((u) => (
+                    <SelectItem key={u} value={u}>{u}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Label>Show $ /</Label>
+            <Select value={baseUnit} onValueChange={(u) => onBaseUnitChange(u as WeightUnit)}>
+              <SelectTrigger className="w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {WEIGHT_UNITS.map((u) => (
+                  <SelectItem key={u} value={u}>{u}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="text-sm">
+              {isFinite(normalizedBase) ? fmt(normalizedBase) : "—"} / {baseUnit}
+            </Badge>
+            <Button size="sm" variant="outline" onClick={copyPerKg} disabled={!prices} title="Copy $/kg">
+              <Copy className="h-4 w-4 mr-1" /> Copy $/kg
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-lg border p-3">
+          {prices ? (
+            <div className="grid grid-cols-2 gap-2">
+              <SummaryRow label="$/oz" value={prices.per_oz} emphasize={baseUnit === "oz"} />
+              <SummaryRow label="$/lb" value={prices.per_lb} emphasize={baseUnit === "lb"} />
+              <SummaryRow label="$/kg" value={prices.per_kg} emphasize={baseUnit === "kg"} />
+              <SummaryRow label="$/g" value={prices.per_g} emphasize={baseUnit === "g"} />
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">Enter price and quantity to see unit prices.</div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function UnitPriceComparator() {
-  // your component body exactly as you wrote it,
-  // and it MUST `return ( ... )` JSX at the end.
-  // (Paste your existing body here.)
+  const [compareMode, setCompareMode] = useState(true);
+  const [left, setLeft] = useState<ItemState>({ name: "A", price: "", quantity: "", unit: "oz" });
+  const [right, setRight] = useState<ItemState>({ name: "B", price: "", quantity: "", unit: "oz" });
+  const [baseUnit, setBaseUnit] = useState<WeightUnit>("kg");
+
+  const leftPrices = useWeightPrices(left);
+  const rightPrices = useWeightPrices(right);
+
+  function baseValue(p: NonNullable<ReturnType<typeof useWeightPrices>>) {
+    const map: Record<WeightUnit, number> = { g: p.per_g, oz: p.per_oz, lb: p.per_lb, kg: p.per_kg } as any;
+    return map[baseUnit];
+  }
+
+  const leftBase = leftPrices ? baseValue(leftPrices) : NaN;
+  const rightBase = rightPrices ? baseValue(rightPrices) : NaN;
+  const leftWins = isFinite(leftBase) && isFinite(rightBase) ? leftBase < rightBase : false;
+  const rightWins = isFinite(leftBase) && isFinite(rightBase) ? rightBase < leftBase : false;
+
+  const leftKg = leftPrices?.per_kg ?? NaN;
+  const rightKg = rightPrices?.per_kg ?? NaN;
+  const haveBothKg = isFinite(leftKg) && isFinite(rightKg);
+  const cheaperVal = haveBothKg ? Math.min(leftKg, rightKg) : NaN;
+  const expensiveVal = haveBothKg ? Math.max(leftKg, rightKg) : NaN;
+  const pctCheaper = haveBothKg && expensiveVal > 0 ? ((expensiveVal - cheaperVal) / expensiveVal) * 100 : 0;
+
+  return (
+    <div className="min-h-screen w-full bg-background text-foreground p-4 md:p-8">
+      <div className="mx-auto max-w-4xl space-y-6">
+        <header className="flex items-center justify-between gap-4">
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">$/Unit Comparator (Weight)</h1>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="compare">Compare</Label>
+              <Switch id="compare" checked={compareMode} onCheckedChange={setCompareMode} />
+            </div>
+            <Button variant="outline" size="icon" onClick={() => { const L = left; setLeft(right); setRight(L); }} title="Swap left/right">
+              <ArrowLeftRight className="h-4 w-4" />
+            </Button>
+            {/* Optional: add reset button back if you want */}
+            <Button variant="outline" size="icon" onClick={() => {
+              setLeft({ name: "A", price: "", quantity: "", unit: "oz" });
+              setRight({ name: "B", price: "", quantity: "", unit: "oz" });
+            }} title="Reset">
+              <RefreshCcw className="h-4 w-4" />
+            </Button>
+          </div>
+        </header>
+
+        <div className="flex items-center gap-2 py-2">
+          <Label>Normalize by</Label>
+          <Select value={baseUnit} onValueChange={(u) => setBaseUnit(u as WeightUnit)}>
+            <SelectTrigger className="w-28">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {WEIGHT_UNITS.map((u) => (
+                <SelectItem key={u} value={u}>{u}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {compareMode ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+            <ItemCard item={left} onChange={setLeft} baseUnit={baseUnit} onBaseUnitChange={setBaseUnit} showName isWinner={leftWins} winnerText={`${left.name || "Left"} ${pctCheaper.toFixed(1)}% cheaper / kg`} />
+            <ItemCard item={right} onChange={setRight} baseUnit={baseUnit} onBaseUnitChange={setBaseUnit} showName isWinner={rightWins} winnerText={`${right.name || "Right"} ${pctCheaper.toFixed(1)}% cheaper / kg`} />
+          </div>
+        ) : (
+          <div className="max-w-2xl">
+            <ItemCard item={left} onChange={setLeft} baseUnit={baseUnit} onBaseUnitChange={setBaseUnit} showName={false} />
+          </div>
+        )}
+
+        <p className="text-xs text-muted-foreground">
+          Note: Comparing weight only (oz, lb, kg, g). Default view shows $/kg.
+        </p>
+      </div>
+    </div>
+  );
 }
