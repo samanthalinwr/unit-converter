@@ -7,11 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-
-    
-  "predeploy": "GITHUB_PAGES=true next build",
-  "deploy": "rm -rf ../docs && mkdir ../docs && cp -r out/* ../docs/ && touch ../docs/.nojekyll && cd .. && git add docs && git commit -m \"Deploy to Pages\" || echo \"no changes\" && git push",
-  "ship": "npm run predeploy && npm run deploy"
+    "ship": "GITHUB_PAGES=true next build && rm -rf ../docs && mkdir ../docs && cp -r out/* ../docs/ && touch ../docs/.nojekyll && cd .. && git add docs && git commit -m \"Deploy to Pages\" || echo \"no changes\" && git push"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.7",
