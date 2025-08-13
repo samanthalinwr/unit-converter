@@ -26,7 +26,7 @@ function useWeightPrices(item: ItemState) { /* ... */ }
 function SummaryRow(/* ... */) { /* ... */ }
 function ItemCard(/* ... */) { /* ... */ }
 
-export default function UnitPriceComparator(): JSX.Element {
+export default function UnitPriceComparator() {
   // your component body exactly as you wrote it,
   // and it MUST `return ( ... )` JSX at the end.
   // (Paste your existing body here.)
